@@ -88,7 +88,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Helper Functions ---
 
-  // Calculates the board index (0-8) based on a 3D point
+  /**
+   * Converts a 3D point on the game plane to a corresponding Tic-Tac-Toe board index.
+   *
+   * @param {THREE.Vector3} point - The 3D point on the XZ plane.
+   * @returns {number|null} The board index (0–8) if the point is within the grid, or {@code null} if out of bounds.
+   */
   function getBoardIndex(point) {
     // Clamp coordinates to be within the grid boundaries slightly inset
     const x = THREE.MathUtils.clamp(point.x, -1.49, 1.49);
@@ -100,7 +105,11 @@ document.addEventListener('DOMContentLoaded', () => {
     return row * 3 + col;
   }
 
-  // Creates the 'X' mesh group
+  /**
+   * Creates a 3D mesh group representing the 'X' game piece for Tic-Tac-Toe.
+   *
+   * @returns {THREE.Group} A group containing two intersecting bar meshes forming an 'X'.
+   */
   function createX() {
     const group = new THREE.Group();
     const bar1 = new THREE.Mesh(xBarGeometry, xMaterial);
@@ -111,14 +120,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return group;
   }
 
-  // Creates the 'O' mesh
+  /**
+   * Creates and returns a 3D mesh representing the 'O' game piece.
+   *
+   * @returns {THREE.Mesh} A torus mesh oriented to lie flat on the game board.
+   */
   function createO() {
     const torus = new THREE.Mesh(oGeometry, oMaterial);
     torus.rotation.x = Math.PI / 2;
     return torus;
   }
 
-  // Places a piece (X or O) on the board
+  /**
+   * Adds an X or O piece to the 3D board at the specified cell index for the given player.
+   *
+   * @param {number} index - The board cell index (0–8) where the piece will be placed.
+   * @param {'X'|'O'} player - The player whose piece ('X' or 'O') is to be placed.
+   */
   function placePiece(index, player) {
     const col = index % 3;
     const row = Math.floor(index / 3);
@@ -130,7 +148,11 @@ document.addEventListener('DOMContentLoaded', () => {
     pieceGroup.add(pieceMesh);
   }
 
-  // Checks win condition or tie
+  /**
+   * Determines if the current board state results in a win, tie, or if the game should continue.
+   *
+   * @returns {'X' | 'O' | 'Tie' | null} Returns 'X' or 'O' if a player has won, 'Tie' if the board is full with no winner, or null if the game is still ongoing.
+   */
   function checkWinCondition() {
     const winPatterns = [
       [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
@@ -147,7 +169,9 @@ document.addEventListener('DOMContentLoaded', () => {
     return board.includes(null) ? null : 'Tie'; // Null if ongoing, 'Tie' if full
   }
 
-  // Handles turn end logic
+  /**
+   * Updates the game state and UI after a player's move, determining if the game has ended or switching to the next player.
+   */
   function handleTurnEnd() {
     const winner = checkWinCondition();
     if (winner) {
@@ -161,7 +185,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Event Handlers ---
 
-  // Handles window resize
+  /**
+   * Adjusts the camera and renderer settings to maintain correct aspect ratio and resolution when the window is resized.
+   */
   function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -169,7 +195,14 @@ document.addEventListener('DOMContentLoaded', () => {
     renderer.setPixelRatio(window.devicePixelRatio);
   }
 
-  // Handles mouse click
+  /**
+   * Processes a pointer event at the given screen coordinates to handle a player's move.
+   *
+   * Converts the screen coordinates to normalized device coordinates, performs raycasting to detect the clicked cell on the game board, and places the current player's piece if the cell is empty and the game is active.
+   *
+   * @param {number} clientX - The X coordinate of the pointer event in screen pixels.
+   * @param {number} clientY - The Y coordinate of the pointer event in screen pixels.
+   */
   function processPointerEvent(clientX, clientY) {
     if (!isGameRunning) return;
 
@@ -189,11 +222,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  /**
+   * Handles mouse click events on the renderer by processing the click coordinates for game interaction.
+   *
+   * @param {MouseEvent} event - The mouse click event.
+   */
   function onClick(event) {
     processPointerEvent(event.clientX, event.clientY);
   }
 
-  // Handles touch start
+  /**
+   * Handles touch start events on the game board, processing the first touch point as a move if present.
+   *
+   * @param {TouchEvent} event - The touch event containing touch point data.
+   */
   function onTouchStart(event) {
     // Prevent default only if the game is running to avoid interfering
     // with other touch interactions if the game ends overlay needs clicks etc.
@@ -205,7 +247,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Resets the game state and visuals
+  /**
+   * Resets the game to its initial state, clearing all pieces from the board and restoring the starting player.
+   *
+   * Removes all 3D piece meshes from the scene, disposes their geometries, resets the board array, sets the current player to 'X', marks the game as running, and updates the status display.
+   *
+   * @remark Shared materials and geometries are not disposed here, as they are reused throughout the game.
+   */
   function resetGame() {
     // Dispose geometries and materials associated with pieces in pieceGroup
     while (pieceGroup.children.length > 0) {
@@ -238,6 +286,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Animation Loop ---
   let rafId;
+  /**
+   * Continuously updates camera controls and renders the 3D scene for animation.
+   */
   function animate() {
     rafId = requestAnimationFrame(animate);
     controls.update(); // Required if enableDamping is true
