@@ -1,6 +1,10 @@
 // Import necessary modules from Three.js (using the version you provided)
-import * as THREE from 'https://unpkg.com/three@0.128.0/build/three.module.js';
-import { OrbitControls } from 'https://unpkg.com/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+// import * as THREE from 'https://unpkg.com/three@0.128.0/build/three.module.js';
+// import { OrbitControls } from 'https://unpkg.com/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+// At the top of main.js
+import * as THREE from 'three'; // Will use the URL from the import map
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // Will also use the import map
+
 
 // Wait for the HTML document to be fully loaded before running the script
 document.addEventListener('DOMContentLoaded', () => {

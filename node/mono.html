@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Tic Tac Toe</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif; /* Use Inter font */
+      background-color: #f0f0f0; /* Light gray background */
+    }
+    #overlay {
+      position: absolute;
+      top: 20px; /* Increased spacing */
+      left: 50%;
+      transform: translateX(-50%); /* Center the overlay */
+      color: #333; /* Darker text */
+      z-index: 1;
+      display: flex; /* Use flexbox for layout */
+      flex-direction: column; /* Stack items vertically */
+      align-items: center; /* Center items horizontally */
+      background-color: rgba(255, 255, 255, 0.85); /* Slightly more opaque background */
+      padding: 15px; /* Add padding */
+      border-radius: 8px; /* Rounded corners */
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Add subtle shadow */
+    }
+    #status {
+      margin-bottom: 10px; /* Increased spacing */
+      font-size: 1.2em;
+      font-weight: 500; /* Medium font weight */
+    }
+    #reset {
+      padding: 8px 16px; /* Adjust padding */
+      border: none;
+      background-color: #007bff; /* Blue background */
+      color: white; /* White text */
+      border-radius: 6px; /* Rounded corners */
+      cursor: pointer;
+      font-size: 1em;
+      transition: background-color 0.2s ease; /* Smooth transition */
+    }
+    #reset:hover {
+      background-color: #0056b3; /* Darker blue on hover */
+    }
+    /* Style for the canvas container */
+    #canvas-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0; /* Ensure it's behind the overlay */
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="overlay">
+    <div id="status" aria-live="polite">Loading game...</div>
+    <button id="reset" aria-label="Restart game">Restart</button>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    // Import necessary modules from Three.js
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // Ensure the DOM is fully loaded before running the script
+    document.addEventListener('DOMContentLoaded', () => {
+
+      // --- DOM Element References ---
+      const statusEl = document.getElementById('status');
+      const resetBtn = document.getElementById('reset');
+      const canvasContainer = document.getElementById('canvas-container'); // Get canvas container
+
+      if (!statusEl || !resetBtn || !canvasContainer) {
+        console.error("Required DOM elements not found!");
+        return; // Stop execution if elements are missing
+      }
+
+      // --- Scene Setup ---
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xdddddd); // Light gray background
+
+      // --- Camera Setup ---
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 5, 5); // Position the camera
+      camera.lookAt(0, 0, 0); // Look at the center of the scene
+
+      // --- Renderer Setup ---
+      const renderer = new THREE.WebGLRenderer({ antialias: true }); // Enable anti-aliasing for smoother edges
+      renderer.setPixelRatio(window.devicePixelRatio); // Adjust for high-DPI screens
+      renderer.setSize(window.innerWidth, window.innerHeight); // Set size to full window
+      canvasContainer.appendChild(renderer.domElement); // Append canvas to the container
+
+      // --- Controls ---
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true; // Add inertia to camera movement
+      controls.dampingFactor = 0.05; // Damping intensity
+      controls.minDistance = 3; // Prevent zooming too close
+      controls.maxDistance = 15; // Prevent zooming too far
+      controls.enablePan = false; // Disable panning for a cleaner orbit
+
+      // --- Lighting ---
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Soft white ambient light
+      scene.add(ambientLight);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6); // Directional light for shadows/highlights
+      directionalLight.position.set(5, 10, 7.5);
+      scene.add(directionalLight);
+
+      // --- Grid Helper ---
+      const gridHelper = new THREE.GridHelper(3, 3, 0x555555, 0x999999); // Visual grid for the board
+      scene.add(gridHelper);
+
+      // --- Invisible Click Plane ---
+      // This plane is used to detect where the user clicks in 3D space
+      const planeGeometry = new THREE.PlaneGeometry(3, 3);
+      const planeMaterial = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }); // Make it invisible
+      const clickPlane = new THREE.Mesh(planeGeometry, planeMaterial);
+      clickPlane.rotation.x = -Math.PI / 2; // Rotate it to be horizontal
+      scene.add(clickPlane);
+
+      // --- Reusable Geometries and Materials (Performance) ---
+      const xMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.5, metalness: 0.2 }); // Red 'X'
+      const xBarGeometry = new THREE.BoxGeometry(0.8, 0.1, 0.1); // Geometry for the bars of 'X'
+      const oMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff, roughness: 0.5, metalness: 0.2 }); // Blue 'O'
+      const oGeometry = new THREE.TorusGeometry(0.35, 0.05, 16, 100); // Geometry for the 'O' torus
+
+      // --- Game State Variables ---
+      let board = Array(9).fill(null); // Represents the 3x3 grid, null = empty
+      let currentPlayer = 'X'; // 'X' always starts
+      let isGameRunning = true; // Flag to check if the game is active
+      let pieceGroup = new THREE.Group(); // Group to hold all placed X's and O's
+      scene.add(pieceGroup);
+
+      // --- UI Update ---
+      statusEl.textContent = `Player ${currentPlayer}'s turn`; // Initial status message
+
+      // --- Raycaster for Click Detection ---
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2(); // Stores mouse coordinates
+
+      // --- Helper Functions ---
+
+      // Calculates the board index (0-8) based on a 3D point on the click plane
+      function getBoardIndexFromPoint(point) {
+        // Clamp coordinates to be within the grid boundaries slightly inset
+        const x = THREE.MathUtils.clamp(point.x, -1.49, 1.49);
+        const z = THREE.MathUtils.clamp(point.z, -1.49, 1.49);
+        // Map the coordinates to grid indices (0, 1, 2)
+        const col = Math.floor((x + 1.5) / 1);
+        const row = Math.floor((z + 1.5) / 1);
+        // Calculate the 1D array index
+        return row * 3 + col;
+      }
+
+      // Creates the 'X' mesh
+      function createXMesh() {
+        const group = new THREE.Group();
+        const bar1 = new THREE.Mesh(xBarGeometry, xMaterial);
+        bar1.rotation.y = Math.PI / 4; // Rotate first bar
+        const bar2 = new THREE.Mesh(xBarGeometry, xMaterial);
+        bar2.rotation.y = -Math.PI / 4; // Rotate second bar
+        group.add(bar1, bar2);
+        return group;
+      }
+
+      // Creates the 'O' mesh
+      function createOMesh() {
+        const torus = new THREE.Mesh(oGeometry, oMaterial);
+        torus.rotation.x = Math.PI / 2; // Rotate torus to be flat
+        return torus;
+      }
+
+      // Places a piece (X or O) on the board at the given index
+      function placePiece(index, player) {
+        const row = Math.floor(index / 3);
+        const col = index % 3;
+        // Calculate position based on row and column (-1, 0, 1)
+        const positionX = col - 1;
+        const positionZ = row - 1;
+
+        let pieceMesh;
+        if (player === 'X') {
+          pieceMesh = createXMesh();
+        } else {
+          pieceMesh = createOMesh();
+        }
+        pieceMesh.position.set(positionX, 0.05, positionZ); // Place slightly above the grid
+        pieceGroup.add(pieceMesh); // Add to the group
+      }
+
+      // Checks if the current player has won or if it's a tie
+      function checkWinCondition() {
+        const winPatterns = [
+          [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+          [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
+          [0, 4, 8], [2, 4, 6]             // Diagonals
+        ];
+
+        for (const pattern of winPatterns) {
+          const [a, b, c] = pattern;
+          if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+            return board[a]; // Return the winning player ('X' or 'O')
+          }
+        }
+
+        if (board.every(cell => cell !== null)) {
+          return 'Tie'; // Return 'Tie' if board is full
+        }
+
+        return null; // Return null if game is ongoing
+      }
+
+      // Handles the game logic after a move
+      function handleTurnEnd() {
+        const winner = checkWinCondition();
+        if (winner) {
+          isGameRunning = false; // Stop the game
+          if (winner === 'Tie') {
+            statusEl.textContent = "It's a Tie!";
+          } else {
+            statusEl.textContent = `Player ${winner} wins!`;
+          }
+        } else {
+          // Switch player
+          currentPlayer = (currentPlayer === 'X') ? 'O' : 'X';
+          statusEl.textContent = `Player ${currentPlayer}'s turn`;
+        }
+      }
+
+      // --- Event Handlers ---
+
+      // Handles window resize events
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight; // Update aspect ratio
+        camera.updateProjectionMatrix(); // Apply changes
+        renderer.setSize(window.innerWidth, window.innerHeight); // Resize renderer
+        renderer.setPixelRatio(window.devicePixelRatio); // Update pixel ratio
+      }
+
+      // Handles click events on the canvas
+      function onClick(event) {
+        if (!isGameRunning) return; // Ignore clicks if game is over
+
+        // Calculate mouse position in normalized device coordinates (-1 to +1)
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        // Update the raycaster with the camera and mouse position
+        raycaster.setFromCamera(mouse, camera);
+
+        // Calculate objects intersecting the picking ray
+        const intersects = raycaster.intersectObject(clickPlane);
+
+        if (intersects.length > 0) {
+          const intersectionPoint = intersects[0].point;
+          const boardIndex = getBoardIndexFromPoint(intersectionPoint);
+
+          // Check if the calculated index is valid and the cell is empty
+          if (boardIndex !== null && board[boardIndex] === null) {
+            board[boardIndex] = currentPlayer; // Update game state
+            placePiece(boardIndex, currentPlayer); // Place the 3D model
+            handleTurnEnd(); // Check for win/tie and switch player
+          }
+        }
+      }
+
+       // Handles touch events on the canvas (for mobile)
+       function onTouchStart(event) {
+         // Prevent default touch behavior like scrolling
+         // event.preventDefault(); // This can sometimes interfere; test if needed
+
+         if (!isGameRunning || event.touches.length === 0) return;
+
+         const touch = event.touches[0]; // Get the first touch point
+
+         // Calculate touch position in normalized device coordinates
+         mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+         mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+
+         // Update the raycaster
+         raycaster.setFromCamera(mouse, camera);
+
+         // Check for intersections
+         const intersects = raycaster.intersectObject(clickPlane);
+
+         if (intersects.length > 0) {
+           const intersectionPoint = intersects[0].point;
+           const boardIndex = getBoardIndexFromPoint(intersectionPoint);
+
+           if (boardIndex !== null && board[boardIndex] === null) {
+             board[boardIndex] = currentPlayer;
+             placePiece(boardIndex, currentPlayer);
+             handleTurnEnd();
+           }
+         }
+       }
+
+      // Resets the game to the initial state
+      function resetGame() {
+        // Remove all pieces from the group and dispose of their resources
+        while (pieceGroup.children.length > 0) {
+          const piece = pieceGroup.children[0];
+          pieceGroup.remove(piece);
+          // If the piece is a group (like 'X'), dispose children geometries/materials
+          if (piece.isGroup) {
+            piece.children.forEach(mesh => {
+              mesh.geometry.dispose();
+              // Material is shared, dispose only once if needed, but standard materials usually don't need explicit disposal unless textures are involved.
+            });
+          } else { // If it's a single mesh (like 'O')
+            piece.geometry.dispose();
+          }
+        }
+        // Note: Materials (xMaterial, oMaterial) are reused, so don't dispose them here.
+
+        // Reset game state variables
+        board.fill(null);
+        currentPlayer = 'X';
+        isGameRunning = true;
+        statusEl.textContent = `Player ${currentPlayer}'s turn`; // Update UI
+      }
+
+      // --- Animation Loop ---
+      let rafId; // RequestAnimationFrame ID
+      function animate() {
+        rafId = requestAnimationFrame(animate); // Loop
+        controls.update(); // Update controls (needed for damping)
+        renderer.render(scene, camera); // Render the scene
+      }
+
+      // --- Event Listeners ---
+      window.addEventListener('resize', onWindowResize);
+      renderer.domElement.addEventListener('click', onClick);
+      renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true }); // Use passive: true if preventDefault isn't needed
+      resetBtn.addEventListener('click', resetGame);
+
+      // Handle page visibility changes (pause animation when tab is hidden)
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          cancelAnimationFrame(rafId); // Pause animation
+        } else {
+          animate(); // Resume animation
+        }
+      });
+
+      // --- Start Animation ---
+      animate();
+
+    }); // End of DOMContentLoaded listener
+  </script>
+</body>
+</html>
